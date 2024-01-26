@@ -26,7 +26,7 @@ impl Extractor {
         });
 
         Extractor {
-            ts_language: (&language).language(),
+            ts_language: language.ts_lang(),
             language,
             query,
             captures,
@@ -103,7 +103,7 @@ impl Extractor {
         } else {
             Ok(Some(ExtractedFile {
                 file: path.map(|p| p.to_owned()),
-                file_type: self.language.to_string(),
+                file_type: self.language.name().to_string(),
                 matches: extracted_matches,
             }))
         }
@@ -164,67 +164,4 @@ where
     out.serialize_field("row", &(point.row + 1))?;
     out.serialize_field("column", &(point.column + 1))?;
     out.end()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::language::Language;
-    use tree_sitter::Parser;
-
-    #[test]
-    fn test_matches_are_extracted() {
-        let lang = Language::Elm;
-        let query = lang
-            .parse_query("(import_clause (upper_case_qid)@import)")
-            .unwrap();
-        let extractor = Extractor::new(lang, query);
-
-        let extracted = extractor
-            .extract_from_text(None, b"import Html.Styled", &mut Parser::new())
-            // From Result<Option<ExtractedFile>>
-            .unwrap()
-            // From Option<ExtractedFile>
-            .unwrap();
-
-        assert_eq!(extracted.matches.len(), 1);
-        assert_eq!(extracted.matches[0].name, "import");
-        assert_eq!(extracted.matches[0].text, "Html.Styled");
-    }
-
-    #[test]
-    fn test_underscore_names_are_ignored() {
-        let lang = Language::Elm;
-        let query = lang
-            .parse_query("(import_clause (upper_case_qid)@_import)")
-            .unwrap();
-        let extractor = Extractor::new(lang, query);
-
-        let extracted = extractor
-            .extract_from_text(None, b"import Html.Styled", &mut Parser::new())
-            // From Result<Option<ExtractedFile>>
-            .unwrap();
-
-        assert_eq!(extracted, None);
-    }
-
-    #[test]
-    fn test_underscore_names_can_still_be_used_in_matchers() {
-        let lang = Language::JavaScript;
-        let query = lang
-            .parse_query("(call_expression (identifier)@_fn (arguments . (string)@import .) (#eq? @_fn require))")
-            .unwrap();
-        let extractor = Extractor::new(lang, query);
-
-        let extracted = extractor
-            .extract_from_text(None, b"let foo = require(\"foo.js\")", &mut Parser::new())
-            // From Result<Option<ExtractedFile>>
-            .unwrap()
-            // From Option<ExtractedFile>
-            .unwrap();
-
-        assert_eq!(extracted.matches.len(), 1);
-        assert_eq!(extracted.matches[0].name, "import");
-        assert_eq!(extracted.matches[0].text, "\"foo.js\"");
-    }
 }

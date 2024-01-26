@@ -2,7 +2,7 @@
 name = "tree-grepper"
 version = "2.5.0-pre"
 authors = ["Brian Hicks <brian@brianthicks.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0.58"
@@ -14,12 +14,10 @@ itertools = "0.10.3"
 rayon = "1.5.3"
 serde = { version = "1.0.139", features = [ "derive" ] }
 serde_json = "1.0.82"
-tree-sitter = "0.20.8"
+tree-sitter = "0.20"
 paste = "1.0.7"
 bat = "0.24"
+libloading = "0.8"
 
 [dev-dependencies]
 insta = "1.15.0"
-
-[build-dependencies]
-cc = { version = "1.0.73", features = [ "parallel" ] }

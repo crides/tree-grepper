@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Error, Result};
 use clap::{crate_authors, crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::str::FromStr;
 
 pub enum Invocation {
@@ -203,7 +203,7 @@ impl Invocation {
         if matches.is_present("languages") {
             Ok(Self::ShowLanguages)
         } else if let Some(raw_lang) = matches.value_of("show-tree") {
-            let lang = Language::from_str(raw_lang).context("could not parse language")?;
+            let lang = Language::get_language(Path::new("/home/steven/.config/nvim/plugged/nvim-treesitter/parser/"), raw_lang).context("could not get language")?;
 
             let paths = Self::paths(&matches)?;
             if paths.len() != 1 {
@@ -243,7 +243,7 @@ impl Invocation {
 
         // the most common case is going to be one query, so let's allocate
         // that immediately...
-        let mut query_strings: HashMap<Language, String> = HashMap::with_capacity(1);
+        let mut query_strings: HashMap<String, (Language, String)> = HashMap::with_capacity(1);
 
         // If you have two tree-sitter queries `(one)` and `(two)`, you can
         // join them together in a single string like `(one)(two)`. In that
@@ -255,30 +255,26 @@ impl Invocation {
         // notice, except that they won't see as much of a slowdown for adding
         // new queries to an invocation as they might expect. (Well, hopefully!)
         for (raw_lang, raw_query) in values.tuples() {
-            let lang = Language::from_str(raw_lang).context("could not parse language")?;
+            let lang = Language::get_language(Path::new("/home/steven/.config/nvim/plugged/nvim-treesitter/parser/"), raw_lang).context("could not get language")?;
 
             let mut query_out = String::from(raw_query);
 
-            let temp_query = lang
-                .parse_query(raw_query)
-                .context("could not parse query")?;
+            let temp_query = tree_sitter::Query::new(lang.ts_lang(), raw_query).context("could not parse query")?;
 
             if temp_query.capture_names().is_empty() {
                 query_out.push_str("@query");
             }
 
-            if let Some(existing) = query_strings.get_mut(&lang) {
+            if let Some((_lang, existing)) = query_strings.get_mut(raw_lang) {
                 existing.push_str(&query_out);
             } else {
-                query_strings.insert(lang, query_out);
+                query_strings.insert(raw_lang.to_string(), (lang, query_out));
             }
         }
 
         let mut out = Vec::with_capacity(query_strings.len());
-        for (lang, raw_query) in query_strings {
-            let query = lang
-                .parse_query(&raw_query)
-                .context("could not parse combined query")?;
+        for (_lang_str, (lang, raw_query)) in query_strings {
+            let query = tree_sitter::Query::new(lang.ts_lang(), &raw_query).context("could not parse combined query")?;
             for i in 0..query.pattern_count() {
                 let preds = query.general_predicates(i);
                 if !preds.is_empty() {

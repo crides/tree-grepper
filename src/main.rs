@@ -10,7 +10,6 @@ use bat::line_range::LineRanges;
 use cli::{Invocation, QueryFormat, QueryOpts, TreeOpts};
 use crossbeam::channel;
 use itertools::Itertools;
-use language::Language;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::env;
 use std::fs;
@@ -64,10 +63,8 @@ fn try_main(args: Vec<String>, out: impl Write) -> Result<()> {
     }
 }
 
-fn show_languages(mut out: impl Write) -> Result<()> {
-    for language in Language::all() {
-        writeln!(out, "{}", language).context("couldn't print a language")?;
-    }
+fn show_languages(_out: impl Write) -> Result<()> {
+    // TODO
 
     Ok(())
 }
@@ -77,7 +74,7 @@ fn show_tree(opts: TreeOpts, out: impl Write) -> Result<()> {
 
     let mut parser = Parser::new();
     parser
-        .set_language(opts.language.language())
+        .set_language(opts.language.ts_lang())
         .context("could not set language")?;
 
     let tree = parser
