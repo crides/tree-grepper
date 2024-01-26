@@ -2,7 +2,6 @@ use crate::language::Language;
 use anyhow::{Context, Result};
 use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
-use std::collections::HashSet;
 use std::fmt::{self, Display};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,17 +13,15 @@ pub struct Extractor {
     ts_language: tree_sitter::Language,
     query: Query,
     captures: Vec<String>,
-    ignores: HashSet<usize>,
 }
 
 impl Extractor {
-    pub fn new(language: Language, query: Query) -> Extractor {
+    pub fn new(language: Language, mut query: Query) -> Extractor {
         let captures = query.capture_names().to_vec();
 
-        let mut ignores = HashSet::default();
-        captures.iter().enumerate().for_each(|(i, name)| {
+        captures.iter().for_each(|name| {
             if name.starts_with('_') {
-                ignores.insert(i);
+                query.disable_capture(name);
             }
         });
 
@@ -33,7 +30,6 @@ impl Extractor {
             language,
             query,
             captures,
-            ignores,
         }
     }
 
@@ -80,7 +76,6 @@ impl Extractor {
             // microcontroller. I don't think this is a huge problem, though,
             // since even the gnarliest queries I've written have something on
             // the order of 20 matches. Nowhere close to 2^16!
-            .filter(|capture| !self.ignores.contains(&(capture.index as usize)))
             .map(|capture| {
                 let name = &self.captures[capture.index as usize];
                 let node = capture.node;
@@ -117,9 +112,9 @@ impl Extractor {
 
 #[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExtractedFile<'query> {
-    file: Option<PathBuf>,
-    file_type: String,
-    matches: Vec<ExtractedMatch<'query>>,
+    pub(crate) file: Option<PathBuf>,
+    pub(crate) file_type: String,
+    pub(crate) matches: Vec<ExtractedMatch<'query>>,
 }
 
 impl<'query> Display for ExtractedFile<'query> {
@@ -156,9 +151,9 @@ pub struct ExtractedMatch<'query> {
     name: &'query str,
     text: String,
     #[serde(serialize_with = "serialize_point")]
-    start: Point,
+    pub(crate) start: Point,
     #[serde(serialize_with = "serialize_point")]
-    end: Point,
+    pub(crate) end: Point,
 }
 
 fn serialize_point<S>(point: &Point, sz: S) -> Result<S::Ok, S::Error>

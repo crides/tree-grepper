@@ -17,14 +17,26 @@ pub fn tree_view(tree: &Tree, source: &[u8], mut out: impl Write) -> Result<()> 
         visited.insert(node.id());
 
         if !node_visited {
-            write!(
-                out,
-                "{}{} {}:{}",
-                indent_str.repeat(indent),
-                node.kind(),
-                node.start_position().row + 1,
-                node.start_position().column + 1,
-            )?;
+            if let Some(field) = cursor.field_name() {
+                write!(
+                    out,
+                    "{}{}: {} {}:{}",
+                    indent_str.repeat(indent),
+                    field,
+                    node.kind(),
+                    node.start_position().row + 1,
+                    node.start_position().column + 1,
+                )?;
+            } else {
+                write!(
+                    out,
+                    "{}{} {}:{}",
+                    indent_str.repeat(indent),
+                    node.kind(),
+                    node.start_position().row + 1,
+                    node.start_position().column + 1,
+                )?;
+            }
             if is_leaf {
                 writeln!(
                     out,

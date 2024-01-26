@@ -21,6 +21,13 @@ pub struct QueryOpts {
     pub git_ignore: bool,
     pub format: QueryFormat,
     pub sort: bool,
+    pub theme: String,
+    pub tab_width: usize,
+    pub before_lines: usize,
+    pub after_lines: usize,
+    pub show_count: bool,
+    pub no_filename: bool,
+    pub no_line_number: bool,
 }
 
 impl QueryOpts {
@@ -85,8 +92,8 @@ impl Invocation {
                 Arg::new("FORMAT")
                     .long("format")
                     .short('f')
-                    .possible_values(&["lines", "json", "json-lines", "pretty-json"])
-                    .default_value("lines")
+                    .possible_values(&["lines", "json", "json-lines", "pretty-json", "pretty"])
+                    .default_value("pretty")
                     .help("what format should we output lines in?")
                     .conflicts_with("languages")
                     .conflicts_with("show-tree")
@@ -113,6 +120,82 @@ impl Invocation {
                     .value_names(&["LANGUAGE"])
                     .conflicts_with("languages")
                     .conflicts_with("additional-query")
+            )
+            .arg(
+                Arg::new("theme")
+                    .long("theme")
+                    .takes_value(true)
+                    .help("Set the theme `bat` is using")
+                    .default_value("gruvbox-dark")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("tab-width")
+                    .long("tab-width")
+                    .takes_value(true)
+                    .help("Number of spaces per tab")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("after")
+                    .long("after")
+                    .short('A')
+                    .takes_value(true)
+                    .help("Number of lines after match to show")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("before")
+                    .long("before")
+                    .short('B')
+                    .takes_value(true)
+                    .help("Number of lines before match to show")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("context")
+                    .long("context")
+                    .short('C')
+                    .takes_value(true)
+                    .help("Number of lines around match to show")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("count")
+                    .long("count")
+                    .short('c')
+                    .help("Show count of matches in each file")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("only-matching")
+                    .long("only-matching")
+                    .short('o')
+                    .help("Only show the matching portions, not full lines")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("no-filename")
+                    .long("no-filename")
+                    .short('I')
+                    .help("Don't show the filenames")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
+            )
+            .arg(
+                Arg::new("no-line-number")
+                    .long("no-line-number")
+                    .short('N')
+                    .help("Don't show the line numbers")
+                    .conflicts_with("languages")
+                    .conflicts_with("show-tree")
             )
             .try_get_matches_from(args)
             .context("could not parse args")?;
@@ -141,6 +224,13 @@ impl Invocation {
                 )
                 .context("could not set format")?,
                 sort: matches.is_present("sort"),
+                theme: matches.value_of("theme").map(|s| s.to_string()).unwrap(),
+                tab_width: matches.value_of("tab-width").map(|s| s.parse().unwrap()).unwrap_or(4),
+                no_filename: matches.is_present("no-filename"),
+                no_line_number: matches.is_present("no-line-number"),
+                show_count: matches.is_present("count"),
+                after_lines: matches.value_of("after").or_else(|| matches.value_of("context")).map(|s| s.parse().unwrap()).unwrap_or(0),
+                before_lines: matches.value_of("before").or_else(|| matches.value_of("context")).map(|s| s.parse().unwrap()).unwrap_or(0),
             }))
         }
     }
@@ -189,7 +279,12 @@ impl Invocation {
             let query = lang
                 .parse_query(&raw_query)
                 .context("could not parse combined query")?;
-
+            for i in 0..query.pattern_count() {
+                let preds = query.general_predicates(i);
+                if !preds.is_empty() {
+                    return Err(anyhow::anyhow!("Unknown predicate '{}'", preds[0].operator));
+                }
+            }
             out.push(Extractor::new(lang, query))
         }
 
@@ -214,6 +309,7 @@ pub enum QueryFormat {
     Json,
     JsonLines,
     PrettyJson,
+    Pretty,
 }
 
 impl FromStr for QueryFormat {
@@ -225,6 +321,7 @@ impl FromStr for QueryFormat {
             "json" => Ok(QueryFormat::Json),
             "json-lines" => Ok(QueryFormat::JsonLines),
             "pretty-json" => Ok(QueryFormat::PrettyJson),
+            "pretty" => Ok(QueryFormat::Pretty),
             _ => bail!("unknown format. See --help for valid formats."),
         }
     }

@@ -5,8 +5,11 @@ mod language;
 mod tree_view;
 
 use anyhow::{bail, Context, Result};
+use bat::line_range::LineRange;
+use bat::line_range::LineRanges;
 use cli::{Invocation, QueryFormat, QueryOpts, TreeOpts};
 use crossbeam::channel;
+use itertools::Itertools;
 use language::Language;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::env;
@@ -148,6 +151,46 @@ fn do_query(opts: QueryOpts, mut out: impl Write) -> Result<()> {
             serde_json::to_writer_pretty(out, &extracted_files)
                 .context("could not write JSON output")?;
         }
+
+        QueryFormat::Pretty => {
+            for file in extracted_files {
+                let ranges = file
+                    .matches
+                    .iter()
+                    .map(|m| {
+                        let end = if m.end.column == 0 {
+                            m.end.row
+                        } else {
+                            m.end.row + 1
+                        };
+                        (m.start.row + 1, end)
+                    })
+                    .collect::<Vec<_>>();
+                let mut pp = bat::PrettyPrinter::new();
+                pp.input_file(file.file.unwrap())
+                    .header(true)
+                    .snip(true)
+                    .grid(true)
+                    .line_numbers(true)
+                    .use_italics(true)
+                    .tab_width(Some(opts.tab_width))
+                    // .term_width(console::Term::stdout().size().1 as usize)
+                    .wrapping_mode(bat::WrappingMode::Character)
+                    .theme(&opts.theme)
+                    .language(&file.file_type);
+                for &(s, e) in &ranges {
+                    pp.highlight_range(s, e);
+                }
+                pp.line_ranges(LineRanges::from(
+                    ranges
+                        .into_iter()
+                        .map(|(s, e)| LineRange::new(s - opts.before_lines, e + opts.after_lines))
+                        .collect_vec(),
+                ))
+                .print()
+                .expect("bat print");
+            }
+        }
     }
 
     Ok(())
@@ -178,9 +221,15 @@ fn find_files(opts: &QueryOpts) -> Result<Vec<ignore::DirEntry>> {
             Box::new(move |entry_result| match entry_result {
                 Ok(entry) => match sender.send(entry) {
                     Ok(()) => ignore::WalkState::Continue,
-                    Err(_) => ignore::WalkState::Quit,
+                    Err(e) => {
+                        dbg!(e);
+                        ignore::WalkState::Quit
+                    }
                 },
-                Err(_) => ignore::WalkState::Quit,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    ignore::WalkState::Continue
+                }
             })
         });
 

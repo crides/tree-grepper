@@ -6,73 +6,74 @@ use paste::paste;
 macro_rules! include_langs {
     ($($lang:ident $nametb:literal),+) => {
         
-        #[derive(PartialEq, Eq, Hash, Debug)]
-        pub enum Language {
-            $($lang),+
-        }
-
-        impl Language {
-            pub fn all() -> Vec<Language> {
-                vec![
-                    $(Language::$lang),+
-                ]
+        paste! {
+            #[derive(PartialEq, Eq, Hash, Debug)]
+            pub enum Language {
+                $($lang),+
             }
 
-            pub fn language(&self) -> tree_sitter::Language {
-                unsafe {
+            impl Language {
+                pub fn all() -> Vec<Language> {
+                    vec![
+                        $(Language::$lang),+
+                    ]
+                }
+
+                pub fn language(&self) -> tree_sitter::Language {
+                    unsafe {
+                        match self {
+                            $(Language::$lang => [<tree_sitter_ $lang:lower>](),)+
+                        }
+                    }
+                }
+
+                pub fn parse_query(&self, raw: &str) -> Result<tree_sitter::Query> {
+                    tree_sitter::Query::new(self.language(), raw).map_err(|err| anyhow!("{}", err))
+                }
+
+                pub fn name_for_types_builder(&self) -> &str {
                     match self {
-                        $(Language::$lang => paste!([<tree_sitter_ $lang:lower>])(),)+
+                        $(Language::$lang => $nametb),+
                     }
                 }
             }
 
-            pub fn parse_query(&self, raw: &str) -> Result<tree_sitter::Query> {
-                tree_sitter::Query::new(self.language(), raw).map_err(|err| anyhow!("{}", err))
-            }
+            impl FromStr for Language {
+                type Err = Error;
 
-            pub fn name_for_types_builder(&self) -> &str {
-                match self {
-                    $(Language::$lang => $nametb),+
+                fn from_str(s: &str) -> Result<Self> {
+                    match s {
+                        $($nametb => Ok(Language::$lang),)+
+                        _ => bail!(
+                            "unknown language {}. Try one of: {}",
+                            s,
+                            Language::all()
+                                .into_iter()
+                                .map(|l| l.to_string())
+                                .inspect(|l| { dbg!(l);})
+                                .collect::<Vec<String>>()
+                                .join(", ")
+                        ),
+                    }
                 }
             }
-        }
 
-        impl FromStr for Language {
-            type Err = Error;
-
-            fn from_str(s: &str) -> Result<Self> {
-                match s {
-                    $(stringify!(paste!($lang:lower)) => Ok(Language::$lang),)+
-                    _ => bail!(
-                        "unknown language {}. Try one of: {}",
-                        s,
-                        Language::all()
-                            .into_iter()
-                            .map(|l| l.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    ),
+            impl Display for Language {
+                fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+                    match self {
+                        $(Language::$lang => f.write_str(stringify!([<$lang:lower>]))),+
+                    }
                 }
             }
-        }
 
-        impl Display for Language {
-            fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-                match self {
-                    $(Language::$lang => f.write_str(stringify!(paste!($lang:lower)))),+
-                }
-            }
-        }
-
-        extern "C" {
-            paste! {
+            extern "C" {
                 $(fn [<tree_sitter_ $lang:lower>]() -> tree_sitter::Language;)+
             }
         }
     };
 }
 
-include_langs!(Cpp "cpp", Elixir "elixir", Elm "elm", Haskell "haskell", JavaScript "js", Markdown "markdown", Nix "nix", Php "php", Ruby "ruby", Rust "rust", TypeScript "ts");
+include_langs!(Cpp "cpp", Rust "rust", C "c", Python "py", JavaScript "js", Lua "lua", Markdown "md", Go "go");
 
 #[cfg(test)]
 mod tests {
